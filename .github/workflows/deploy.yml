@@ -361,6 +361,7 @@ jobs:
       - name: Set the public API origin from the shared production config
         run: node "$GITHUB_WORKSPACE/deploy/public-config.cjs" web-env >> "$GITHUB_ENV"
       - name: Pull Vercel environment and build the landing and panel
+        working-directory: ${{ github.workspace }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -370,6 +371,7 @@ jobs:
           vercel build --prod --token="$VERCEL_TOKEN"
       - name: Stage the Vercel release without moving production traffic
         id: stage
+        working-directory: ${{ github.workspace }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -388,6 +390,7 @@ jobs:
           location="$(curl --silent --show-error --max-time 30 --output /dev/null --dump-header - "$DEPLOYMENT_URL/downloads/tinku-latest.apk" | awk 'tolower($1) == "location:" {gsub("\r", "", $2); print $2}')"
           test "$location" = "$EXPECTED_APK_REDIRECT_URL" || { echo '::error::La ruta estable del APK no redirige al VPS configurado.'; exit 1; }
       - name: Promote the checked Web and APK release to production
+        working-directory: ${{ github.workspace }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
