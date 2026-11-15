@@ -35,7 +35,13 @@ Los valores de Google y Stripe son identificadores/llaves públicas de cliente, 
 
 ## Vercel
 
-Vincula el proyecto Vercel a este repositorio y establece `Web` como **Root Directory**. El workflow instala la CLI, descarga la configuración de producción del proyecto, compila el contenido completo de `Web/` y crea un deployment de producción en staging con `--skip-domain`. Verifica landing, metadata y contenido binario/checksum del APK y luego promueve ese deployment.
+En Vercel crea un proyecto para el repositorio GitHub de Tinku y configura `Web` como **Root Directory** y Next.js como framework. En la sección **Root Directory**, activa **Include source files outside of the Root Directory in the Build Step**: `Web/next.config.mjs` importa la configuración compartida desde `deploy/` y `config/`, que están fuera de `Web/`.
+
+El archivo `Web/vercel.json` desactiva los deployments automáticos disparados directamente por Git. Mantén el repositorio conectado para administrar el proyecto; producción se despliega desde el workflow de GitHub Actions, que filtra cambios por carpeta y corre `vercel build` y `vercel deploy --prebuilt`. El workflow prepara el deployment sin mover el dominio, verifica landing y redirección de APK y luego promueve ese deployment. La CLI puede desplegar el proyecto aunque tenga el repositorio conectado.
+
+En **Settings → General** copia el **Project ID**. El **Organization ID** aparece en la configuración del equipo o en `.vercel/project.json` después de vincular el proyecto con la CLI. Crea un **Vercel Access Token** y guarda los tres valores en el environment `production` del repositorio GitHub como `VERCEL_TOKEN`, `VERCEL_ORG_ID` y `VERCEL_PROJECT_ID`. No hacen falta variables API duplicadas en Vercel: el workflow deriva el origen desde `config/domains.json`.
+
+El proyecto web usa `https://tinku-web.vercel.app` como dominio público. `config/domains.json` debe tener en `webOrigin` el origen público final de la landing/panel, porque se usa para construir la URL pública del APK. El dominio API definido actualmente es `https://api-tinku.duckdns.org`.
 
 Los únicos dominios productivos están en `config/domains.json`. CI deriva de allí `NEXT_PUBLIC_API_URL`, la URL API de la app y el destino de la redirección estable del APK. No dupliques los dominios en variables de producción de Vercel.
 
@@ -53,6 +59,6 @@ La landing y el panel usan `/downloads/tinku-latest.apk`. Vercel responde con un
 
 En el VPS hay que crear `deploy/apks/releases/` con permisos para el usuario de Actions/API y configurar el proxy HTTPS del dominio API para enviar `GET /downloads/tinku-latest.apk` a Node en `127.0.0.1:3300`. Configura además la ruta estática `/downloads/releases/` con alias de solo lectura a `/var/www/tinku/monorepo/deploy/apks/releases/`, deshabilita el listado de directorios y permite APK grandes con streaming. Esta ruta estática evita pasar el binario por Express. El workflow necesita los secretos `VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_SSH_KEY` y `VPS_KNOWN_HOSTS`, compartidos con el despliegue API.
 
-## Conectar el repositorio
+## Habilitar producción
 
-La nueva carpeta se creó como un repositorio Git independiente en la rama `main`, sin commit inicial ni remoto, para que se pueda revisar antes de publicar. Tras crear el repositorio GitHub destino, añade su URL como `origin`, crea el primer commit y publica `main`. Luego completa GitHub/Vercel/servidor, ejecuta el flujo con despliegue deshabilitado para revisar las comprobaciones y habilita `TINKU_DEPLOY_ENABLED` cuando todo esté preparado.
+El workflow valida API, app y web en `main`, pero no despliega mientras `TINKU_DEPLOY_ENABLED` no sea `true`. Añade primero los secretos de Vercel y GitHub, prepara los secretos Android y VPS, configura en el VPS el dominio API, TLS, proxy y rutas del APK, y verifica los despliegues de prueba. Cuando todo esté listo, crea o confirma la variable de repositorio `TINKU_DEPLOY_ENABLED=true`. A partir de ahí, cada push a `main` valida los tres componentes y despliega solo los componentes afectados.

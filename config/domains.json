@@ -1,6 +1,6 @@
 {
-  "apiOrigin": "https://api.tinku.doc-ia.cloud",
-  "webOrigin": "https://tinku.doc-ia.cloud",
+  "apiOrigin": "https://api-tinku.duckdns.org",
+  "webOrigin": "https://tinku-web.vercel.app",
   "apkLatestPath": "/downloads/tinku-latest.apk",
   "apkReleasesPath": "/downloads/releases"
 }
