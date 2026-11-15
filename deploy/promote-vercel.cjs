@@ -85,8 +85,13 @@ async function main() {
     const productionAlias = (Array.isArray(promotionStatus.aliases) ? promotionStatus.aliases : [])
       .find((alias) => alias.alias === productionHost);
 
-    if (productionAlias?.status === "mapped") {
-      process.stdout.write(`Deployment ${deployment.id} promovido y asignado a ${productionHost}.\n`);
+    // Vercel's promote-aliases endpoint has returned `completed` for a
+    // successfully mapped production alias in current deployments. Older
+    // responses used `mapped`, so accept both successful terminal states.
+    if (productionAlias?.status === "mapped" || productionAlias?.status === "completed") {
+      process.stdout.write(
+        `Deployment ${deployment.id} promovido y asignado a ${productionHost} (estado: ${productionAlias.status}).\n`,
+      );
       return;
     }
     if (productionAlias?.status === "failed") {
