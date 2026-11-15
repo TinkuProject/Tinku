@@ -69,28 +69,39 @@ async function main() {
     fs.readFileSync(path.join(__dirname, "../config/domains.json"), "utf8"),
   );
   const productionHost = new URL(webOrigin).hostname;
-  const deploymentStatusUrl = new URL(
-    `https://api.vercel.com/v13/deployments/${encodeURIComponent(deployment.id)}`,
+  const promoteAliasesUrl = new URL(
+    `https://api.vercel.com/v1/projects/${encodeURIComponent(projectId)}/promote/aliases`,
   );
-  deploymentStatusUrl.searchParams.set("teamId", teamId);
+  promoteAliasesUrl.searchParams.set("teamId", teamId);
 
   const deadline = Date.now() + 180_000;
+  let latestAliasStatus = "todavía no disponible";
   while (Date.now() < deadline) {
-    const promotedDeployment = await requestJson(
-      deploymentStatusUrl,
+    const promotionStatus = await requestJson(
+      promoteAliasesUrl,
       { headers },
-      "no pudo verificar el deployment promovido",
+      "no pudo consultar el estado de los alias promovidos",
     );
-    const aliases = Array.isArray(promotedDeployment.alias) ? promotedDeployment.alias : [];
-    const aliasAssigned = promotedDeployment.aliasAssigned === true || promotedDeployment.aliasAssigned === "true";
-    if (aliasAssigned && aliases.includes(productionHost)) {
+    const productionAlias = (Array.isArray(promotionStatus.aliases) ? promotionStatus.aliases : [])
+      .find((alias) => alias.alias === productionHost);
+
+    if (productionAlias?.status === "mapped") {
       process.stdout.write(`Deployment ${deployment.id} promovido y asignado a ${productionHost}.\n`);
       return;
     }
+    if (productionAlias?.status === "failed") {
+      throw new Error(
+        `Vercel aceptó la promoción, pero falló la asignación de ${productionHost}` +
+        (productionAlias.error ? `: ${productionAlias.error}` : "."),
+      );
+    }
+    latestAliasStatus = productionAlias?.status || "alias aún no reportado";
     await wait(5_000);
   }
 
-  throw new Error(`Vercel aceptó la promoción, pero ${productionHost} no quedó asignado dentro de 3 minutos.`);
+  throw new Error(
+    `Vercel aceptó la promoción, pero no confirmó ${productionHost} como asignado dentro de 3 minutos (último estado: ${latestAliasStatus}).`,
+  );
 }
 
 main().catch((error) => {

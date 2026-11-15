@@ -56,7 +56,7 @@ AUTH_CODE_RESEND_SECONDS=60
 AUTH_CODE_MAX_ATTEMPTS=5
 AUTH_CODE_MAX_REQUESTS_PER_HOUR=5
 AUTH_CODE_MAX_REQUESTS_PER_IP_HOUR=20
-PORT=3000
+PORT=3003
 NODE_ENV=development
 TRUST_PROXY=loopback
 CORS_ALLOWED_ORIGINS=http://localhost:5173
@@ -107,7 +107,7 @@ npm run db:migrate
 Con la API levantada:
 
 ```bash
-curl http://localhost:3000/health/live
+curl http://localhost:3003/health/live
 ```
 
 Respuesta esperada:
@@ -119,7 +119,7 @@ Respuesta esperada:
 Readiness valida además la conexión con PostgreSQL:
 
 ```bash
-curl http://localhost:3000/health/ready
+curl http://localhost:3003/health/ready
 ```
 
 Devuelve HTTP `200` con `database: "up"` o HTTP `503` si la API todavía no
