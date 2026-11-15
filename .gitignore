@@ -1,0 +1,46 @@
+# Secrets and local environment files
+secrets/
+**/secrets/
+**/.env
+**/.env.*
+!**/.env.example
+**/key.properties
+**/local.properties
+client_secret*.json
+**/client_secret*.json
+firebase-key.json
+**/firebase-key.json
+**/*service-account*.json
+**/*service_account*.json
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+*.pem
+
+# Dependencies, generated files, and tool caches
+**/node_modules/
+**/.dart_tool/
+**/.pub-cache/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.idea/
+**/*.iml
+**/.gradle/
+**/.next/
+**/.vercel/
+**/build/
+**/dist/
+**/out/
+**/coverage/
+**/release/
+**/.DS_Store
+*.log
+*.tsbuildinfo
+
+# Android packages are built and uploaded to the VPS for each production release.
+*.apk
+*.aab
+Web/public/downloads/release.json
+Web/public/downloads/Tinku.apk.sha256

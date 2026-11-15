@@ -1,0 +1,9 @@
+const Map<String, String> dayNamesEs = {
+  'monday': 'Lunes',
+  'tuesday': 'Martes',
+  'wednesday': 'Miércoles',
+  'thursday': 'Jueves',
+  'friday': 'Viernes',
+  'saturday': 'Sábado',
+  'sunday': 'Domingo',
+};

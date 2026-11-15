@@ -1,0 +1,11 @@
+{
+  "name": "tinku-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "check:api": "npm --prefix Api ci && npm --prefix Api test && npm --prefix Api run test:database",
+    "check:web": "npm --prefix Web ci && npm --prefix Web run lint && npm --prefix Web run build",
+    "check:app": "cd App && flutter pub get --enforce-lockfile && flutter analyze && flutter test"
+  }
+}

@@ -1,0 +1,378 @@
+name: Verify and deploy Tinku
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tinku-monorepo-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      app: ${{ steps.filter.outputs.app }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Detect deployable changes
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.before || '' }}
+          HEAD_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          api=false
+          app=false
+          web=false
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            api=true
+            app=true
+            web=true
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+              api=true
+              app=true
+              web=true
+            else
+              while IFS= read -r -d '' file; do
+                case "$file" in
+                  Api/*|deploy/package-api.cjs|deploy/run-migrations.cjs|deploy/ecosystem.config.cjs|deploy/ssh-deploy-api.sh|deploy/server-deploy-api.sh)
+                    api=true
+                    ;;
+                  App/*|config/android-version.json|config/environments/production.env|deploy/prepare-android.cjs|deploy/package-android.cjs|deploy/ssh-deploy-apk.sh|deploy/server-deploy-apk.sh)
+                    app=true
+                    ;;
+                  Web/*)
+                    web=true
+                    ;;
+                  deploy/public-config.cjs)
+                    app=true
+                    web=true
+                    ;;
+                  config/domains.json)
+                    api=true
+                    app=true
+                    web=true
+                    ;;
+                esac
+              done < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA")
+            fi
+          fi
+
+          echo "api=$api" >> "$GITHUB_OUTPUT"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+
+  api:
+    needs: [changes]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: tinku_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tinku_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        shell: bash
+        working-directory: Api
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/tinku_ci
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/tinku_ci
+      JWT_ACCESS_SECRET: ci-access-secret-not-for-production
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-for-production
+      AUTH_CODE_PEPPER: ci-verification-pepper-not-for-production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Api/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - name: Test migrations and database lifecycle in an isolated PostGIS database
+        run: npm run test:database
+      - name: Package the verified API release
+        id: package
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.TINKU_DEPLOY_ENABLED == 'true' && needs.changes.outputs.api == 'true'
+        working-directory: .
+        env:
+          RELEASE_ID: ${{ env.RELEASE_ID }}
+        run: node deploy/package-api.cjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.TINKU_DEPLOY_ENABLED == 'true' && needs.changes.outputs.api == 'true'
+        with:
+          name: tinku-api-${{ github.run_id }}
+          path: |
+            release/tinku-api-*.tar.gz
+            release/tinku-api-*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+  web:
+    needs: [changes]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: Web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - name: Set the public API origin from the shared production config
+        working-directory: .
+        run: node ../deploy/public-config.cjs web-env >> "$GITHUB_ENV"
+      - run: npm run build
+
+  app:
+    needs: [changes]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+        working-directory: App
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: "3.35.6"
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze
+      - run: flutter test
+
+  android:
+    needs: [api, web, app, changes]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.TINKU_DEPLOY_ENABLED == 'true' && needs.changes.outputs.app == 'true'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: bash
+        working-directory: App
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: "3.35.6"
+          channel: stable
+          cache: true
+      - name: Restore the existing Android signing identity and generate public build config
+        id: signing
+        working-directory: ..
+        env:
+          TINKU_ANDROID_KEYSTORE_BASE64: ${{ secrets.TINKU_ANDROID_KEYSTORE_BASE64 }}
+          TINKU_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.TINKU_ANDROID_KEYSTORE_PASSWORD }}
+          TINKU_ANDROID_KEY_ALIAS: ${{ secrets.TINKU_ANDROID_KEY_ALIAS }}
+          TINKU_ANDROID_KEY_PASSWORD: ${{ secrets.TINKU_ANDROID_KEY_PASSWORD }}
+          TINKU_GOOGLE_WEB_CLIENT_ID: ${{ vars.TINKU_GOOGLE_WEB_CLIENT_ID }}
+          TINKU_STRIPE_PUBLISHABLE_KEY: ${{ vars.TINKU_STRIPE_PUBLISHABLE_KEY }}
+        run: node deploy/prepare-android.cjs
+      - run: flutter pub get --enforce-lockfile
+      - name: Build the existing Tinku Android application
+        env:
+          ANDROID_BUILD_NUMBER: ${{ steps.signing.outputs.build_number }}
+          ANDROID_VERSION_NAME: ${{ steps.signing.outputs.version_name }}
+          DART_DEFINES: ${{ steps.signing.outputs.dart_defines }}
+        run: flutter build apk --release --build-name="$ANDROID_VERSION_NAME" --build-number="$ANDROID_BUILD_NUMBER" --dart-define-from-file="$DART_DEFINES"
+      - name: Verify APK package, signer, version and prepare checksum metadata
+        working-directory: ..
+        env:
+          ANDROID_BUILD_NUMBER: ${{ steps.signing.outputs.build_number }}
+          ANDROID_VERSION_NAME: ${{ steps.signing.outputs.version_name }}
+          TINKU_ANDROID_CERT_SHA256: ${{ vars.TINKU_ANDROID_CERT_SHA256 }}
+          APK_SIGNATURE_REPORT: ${{ runner.temp }}/tinku-apk-signature.txt
+          APK_BADGING_REPORT: ${{ runner.temp }}/tinku-apk-badging.txt
+          RELEASE_ID: ${{ env.RELEASE_ID }}
+        run: |
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk_root" || { echo '::error::No se encontro Android SDK.'; exit 1; }
+          build_tools="$(find "$sdk_root/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -f "$build_tools/lib/apksigner.jar" && test -x "$build_tools/aapt" || { echo '::error::Falta apksigner o aapt.'; exit 1; }
+          "$JAVA_HOME/bin/java" -jar "$build_tools/lib/apksigner.jar" verify --verbose --print-certs App/build/app/outputs/flutter-apk/app-release.apk > "$APK_SIGNATURE_REPORT"
+          "$build_tools/aapt" dump badging App/build/app/outputs/flutter-apk/app-release.apk > "$APK_BADGING_REPORT"
+          node deploy/package-android.cjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tinku-android-${{ github.run_id }}
+          path: ${{ runner.temp }}/tinku-android-release/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: Remove temporary Android signing material
+        if: always()
+        env:
+          KEYSTORE_PATH: ${{ steps.signing.outputs.keystore_path }}
+        run: |
+          rm -f -- android/key.properties
+          if [[ -n "${KEYSTORE_PATH:-}" ]]; then rm -f -- "$KEYSTORE_PATH"; fi
+
+  deploy-api:
+    needs: [api, web, app, changes]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.TINKU_DEPLOY_ENABLED == 'true' && needs.changes.outputs.api == 'true'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tinku-api-${{ github.run_id }}
+          path: release
+      - name: Activate the verified API release on the VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          RELEASE_ID: ${{ env.RELEASE_ID }}
+        run: bash deploy/ssh-deploy-api.sh "release/tinku-api-$RELEASE_ID.tar.gz" "$RELEASE_ID"
+
+  deploy-apk:
+    needs: [android, changes]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.TINKU_DEPLOY_ENABLED == 'true' && needs.changes.outputs.app == 'true'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tinku-android-${{ github.run_id }}
+          path: ${{ runner.temp }}/tinku-android-release
+      - name: Publish the verified APK release to the VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          RELEASE_ID: ${{ env.RELEASE_ID }}
+        run: bash deploy/ssh-deploy-apk.sh "$RUNNER_TEMP/tinku-android-release" "$RELEASE_ID"
+
+  deploy-web:
+    needs: [api, web, app, changes, android, deploy-api, deploy-apk]
+    if: >-
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request' &&
+      vars.TINKU_DEPLOY_ENABLED == 'true' &&
+      needs.changes.outputs.web == 'true' &&
+      needs.api.result == 'success' &&
+      needs.web.result == 'success' &&
+      needs.app.result == 'success' &&
+      (needs.android.result == 'success' || needs.android.result == 'skipped') &&
+      (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped') &&
+      (needs.deploy-apk.result == 'success' || needs.deploy-apk.result == 'skipped')
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: Web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Pull Vercel production settings and build the exact site release
+        working-directory: .
+        run: npm install --global vercel@65.16.0
+      - name: Set the public API origin from the shared production config
+        run: node ../deploy/public-config.cjs web-env >> "$GITHUB_ENV"
+      - name: Pull Vercel environment and build the landing and panel
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+      - name: Stage the Vercel release without moving production traffic
+        id: stage
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN")"
+          [[ "$deployment_url" =~ ^https://[A-Za-z0-9.-]+$ ]] || { echo '::error::Vercel no devolvio una URL de release valida.'; exit 1; }
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+      - name: Check landing and stable APK redirect before assigning the domain
+        env:
+          DEPLOYMENT_URL: ${{ steps.stage.outputs.url }}
+          EXPECTED_APK_REDIRECT_URL: ${{ env.TINKU_APK_REDIRECT_URL }}
+        run: |
+          curl --fail --silent --show-error --max-time 30 "$DEPLOYMENT_URL/" -o "$RUNNER_TEMP/tinku-index.html"
+          grep -q 'Tinku' "$RUNNER_TEMP/tinku-index.html"
+          location="$(curl --silent --show-error --max-time 30 --output /dev/null --dump-header - "$DEPLOYMENT_URL/downloads/tinku-latest.apk" | awk 'tolower($1) == "location:" {gsub("\r", "", $2); print $2}')"
+          test "$location" = "$EXPECTED_APK_REDIRECT_URL" || { echo '::error::La ruta estable del APK no redirige al VPS configurado.'; exit 1; }
+      - name: Promote the checked Web and APK release to production
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel promote "${{ steps.stage.outputs.url }}" --token="$VERCEL_TOKEN"

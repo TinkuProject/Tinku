@@ -1,0 +1,43 @@
+config:
+  target: "http://localhost:3003"
+  phases:
+    - duration: 30
+      arrivalRate: 50
+      name: "Carga ligera"
+    - duration: 30
+      arrivalRate: 100
+      name: "Carga media"
+    - duration: 30
+      arrivalRate: 200
+      name: "Carga alta"
+  payload:
+    path: "./users.csv"
+    fields:
+      - "email"
+      - "password"
+  plugins:
+    metrics-by-endpoint: {}
+  ensure:
+    maxErrorRate: 1
+
+scenarios:
+  - name: "Autenticación y consulta de datos"
+    flow:
+      - post:
+          url: "/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.access_token"
+              as: token
+      - get:
+          url: "/businesses?limit=20&offset=0"
+          headers:
+            Authorization: "Bearer {{ token }}"
+      - get:
+          url: "/notifications/unread-count"
+          headers:
+            Authorization: "Bearer {{ token }}"
+
+

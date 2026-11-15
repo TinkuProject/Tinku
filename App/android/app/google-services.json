@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "597707842017",
+    "project_id": "tinku-prod",
+    "storage_bucket": "tinku-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:597707842017:android:b857f5150c9afc0d43f2a0",
+        "android_client_info": {
+          "package_name": "com.tinku.tinkuapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "597707842017-qgqpaod7ijel4melairo5829jc0ju6sh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tinku.tinkuapp",
+            "certificate_hash": "ef7466383c24cfa7c805a1cf7f68da01820204f6"
+          }
+        },
+        {
+          "client_id": "597707842017-3ae8oh2pdumb5e3viph8sr2h39jp7gau.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYZCIqwqK1SKz_WWMZihn1cGzAmW-4u6Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "597707842017-3ae8oh2pdumb5e3viph8sr2h39jp7gau.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

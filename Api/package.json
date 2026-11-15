@@ -1,0 +1,58 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "test": "npm run build && node --test tests/*.test.js",
+    "test:integration": "npm run build && node --test tests-integration/*.test.js",
+    "test:database": "npm run build && ts-node scripts/testDatabase.ts",
+    "storage:privatize-claims": "ts-node scripts/privatizeClaimDocuments.ts",
+    "security:seed-accounts": "ts-node scripts/secureSeedAccounts.ts",
+    "start": "node dist/index.js",
+    "seed": "ts-node scripts/seedUsers.ts",
+    "db:init": "ts-node scripts/initDb.ts",
+    "db:migrate": "ts-node scripts/runMigrations.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@google-cloud/storage": "^8.0.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.7.0",
+    "file-type": "^22.0.0",
+    "firebase-admin": "^14.2.0",
+    "google-auth-library": "^11.0.2",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.0.2",
+    "pg": "^8.23.0",
+    "proxy-addr": "^2.0.8",
+    "resend": "^6.28.1",
+    "sharp": "^0.35.5",
+    "stripe": "^22.5.0",
+    "uuid": "^11.1.1",
+    "wkx": "^0.5.0",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.3.0",
+    "@types/pg": "^8.23.1",
+    "@types/uuid": "^10.0.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.2"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}
