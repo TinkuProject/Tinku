@@ -384,10 +384,12 @@ jobs:
         env:
           DEPLOYMENT_URL: ${{ steps.stage.outputs.url }}
           EXPECTED_APK_REDIRECT_URL: ${{ env.TINKU_APK_REDIRECT_URL }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
+          test -n "$VERCEL_AUTOMATION_BYPASS_SECRET" || { echo '::error::Falta el secret VERCEL_AUTOMATION_BYPASS_SECRET para probar el deployment protegido de Vercel.'; exit 1; }
           curl --fail --location --silent --show-error --max-time 30 "$DEPLOYMENT_URL/" -o "$RUNNER_TEMP/tinku-index.html"
           grep -qi 'Tinku' "$RUNNER_TEMP/tinku-index.html" || { echo '::error::La URL de release no devolvio el contenido de la landing Tinku.'; exit 1; }
-          location="$(curl --silent --show-error --max-time 30 --output /dev/null --dump-header - "$DEPLOYMENT_URL/downloads/tinku-latest.apk" | awk 'tolower($1) == "location:" {gsub("\r", "", $2); print $2}')"
+          location="$(curl --silent --show-error --max-time 30 --header "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" --output /dev/null --dump-header - "$DEPLOYMENT_URL/downloads/tinku-latest.apk" | awk 'tolower($1) == "location:" {gsub("\r", "", $2); print $2}')"
           test "$location" = "$EXPECTED_APK_REDIRECT_URL" || { echo '::error::La ruta estable del APK no redirige al VPS configurado.'; exit 1; }
       - name: Promote the checked Web and APK release to production
         working-directory: ${{ github.workspace }}
