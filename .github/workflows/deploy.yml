@@ -397,4 +397,5 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel promote "${{ steps.stage.outputs.url }}" --yes --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"
+          DEPLOYMENT_URL: ${{ steps.stage.outputs.url }}
+        run: node deploy/promote-vercel.cjs
