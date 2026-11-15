@@ -385,8 +385,8 @@ jobs:
           DEPLOYMENT_URL: ${{ steps.stage.outputs.url }}
           EXPECTED_APK_REDIRECT_URL: ${{ env.TINKU_APK_REDIRECT_URL }}
         run: |
-          curl --fail --silent --show-error --max-time 30 "$DEPLOYMENT_URL/" -o "$RUNNER_TEMP/tinku-index.html"
-          grep -q 'Tinku' "$RUNNER_TEMP/tinku-index.html"
+          curl --fail --location --silent --show-error --max-time 30 "$DEPLOYMENT_URL/" -o "$RUNNER_TEMP/tinku-index.html"
+          grep -qi 'Tinku' "$RUNNER_TEMP/tinku-index.html" || { echo '::error::La URL de release no devolvio el contenido de la landing Tinku.'; exit 1; }
           location="$(curl --silent --show-error --max-time 30 --output /dev/null --dump-header - "$DEPLOYMENT_URL/downloads/tinku-latest.apk" | awk 'tolower($1) == "location:" {gsub("\r", "", $2); print $2}')"
           test "$location" = "$EXPECTED_APK_REDIRECT_URL" || { echo '::error::La ruta estable del APK no redirige al VPS configurado.'; exit 1; }
       - name: Promote the checked Web and APK release to production
