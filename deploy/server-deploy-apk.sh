@@ -38,6 +38,8 @@ trap 'cleanup_staging; cleanup_files' EXIT
 install -m 0644 "$apk" "$staging/Tinku.apk"
 install -m 0644 "$metadata" "$staging/release.json"
 install -m 0644 "$checksum" "$staging/Tinku.apk.sha256"
+# Nginx serves APK releases directly, so it must be able to traverse this directory.
+chmod 0755 "$staging"
 mv -- "$staging" "$release"
 trap cleanup_files EXIT
 

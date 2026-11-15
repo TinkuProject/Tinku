@@ -97,4 +97,10 @@ if [[ "$healthy" != true ]]; then
   exit 1
 fi
 
+if ! PM2_HOME="$deploy_root/pm2" pm2 save; then
+  echo "No se pudo guardar la lista PM2 para el siguiente reinicio." >&2
+  restore_previous
+  exit 1
+fi
+
 printf 'API activa: %s\n' "$release_id"

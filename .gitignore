@@ -44,3 +44,6 @@ firebase-key.json
 *.aab
 Web/public/downloads/release.json
 Web/public/downloads/Tinku.apk.sha256
+
+.vercel
+.env*
