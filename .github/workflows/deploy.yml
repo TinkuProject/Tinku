@@ -107,6 +107,7 @@ jobs:
       JWT_ACCESS_SECRET: ci-access-secret-not-for-production
       JWT_REFRESH_SECRET: ci-refresh-secret-not-for-production
       AUTH_CODE_PEPPER: ci-verification-pepper-not-for-production
+      FIREBASE_STORAGE_BUCKET: tinku-ci.appspot.com
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -116,6 +117,22 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: Api/package-lock.json
+      - name: Generate isolated Firebase credentials for CI tests
+        run: |
+          node <<'NODE' >> "$GITHUB_ENV"
+          const { generateKeyPairSync } = require("node:crypto");
+          const { privateKey } = generateKeyPairSync("rsa", {
+            modulusLength: 2048,
+            privateKeyEncoding: { type: "pkcs8", format: "pem" },
+            publicKeyEncoding: { type: "spki", format: "pem" },
+          });
+          const serviceAccount = {
+            project_id: "tinku-ci",
+            client_email: "ci@tinku-ci.iam.gserviceaccount.com",
+            private_key: privateKey,
+          };
+          process.stdout.write(`FIREBASE_ADMIN_KEY_B64=${Buffer.from(JSON.stringify(serviceAccount)).toString("base64")}\n`);
+          NODE
       - run: npm ci --no-audit --no-fund
       - run: npm test
       - name: Test migrations and database lifecycle in an isolated PostGIS database
@@ -159,7 +176,7 @@ jobs:
       - run: npm run lint
       - name: Set the public API origin from the shared production config
         working-directory: .
-        run: node ../deploy/public-config.cjs web-env >> "$GITHUB_ENV"
+        run: node "$GITHUB_WORKSPACE/deploy/public-config.cjs" web-env >> "$GITHUB_ENV"
       - run: npm run build
 
   app:
@@ -342,7 +359,7 @@ jobs:
         working-directory: .
         run: npm install --global vercel@65.16.0
       - name: Set the public API origin from the shared production config
-        run: node ../deploy/public-config.cjs web-env >> "$GITHUB_ENV"
+        run: node "$GITHUB_WORKSPACE/deploy/public-config.cjs" web-env >> "$GITHUB_ENV"
       - name: Pull Vercel environment and build the landing and panel
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
