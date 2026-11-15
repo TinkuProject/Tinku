@@ -228,7 +228,7 @@ jobs:
           cache: true
       - name: Restore the existing Android signing identity and generate public build config
         id: signing
-        working-directory: ..
+        working-directory: ${{ github.workspace }}
         env:
           TINKU_ANDROID_KEYSTORE_BASE64: ${{ secrets.TINKU_ANDROID_KEYSTORE_BASE64 }}
           TINKU_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.TINKU_ANDROID_KEYSTORE_PASSWORD }}
@@ -245,7 +245,7 @@ jobs:
           DART_DEFINES: ${{ steps.signing.outputs.dart_defines }}
         run: flutter build apk --release --build-name="$ANDROID_VERSION_NAME" --build-number="$ANDROID_BUILD_NUMBER" --dart-define-from-file="$DART_DEFINES"
       - name: Verify APK package, signer, version and prepare checksum metadata
-        working-directory: ..
+        working-directory: ${{ github.workspace }}
         env:
           ANDROID_BUILD_NUMBER: ${{ steps.signing.outputs.build_number }}
           ANDROID_VERSION_NAME: ${{ steps.signing.outputs.version_name }}
