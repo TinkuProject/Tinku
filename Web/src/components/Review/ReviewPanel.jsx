@@ -6,12 +6,14 @@ import {
     FaCalendarAlt,
     FaUserCheck,
     FaBuilding,
+    FaWarehouse,
 } from 'react-icons/fa';
 
 import BusinessReview from './BusinessReview';
 import EventReview from './EventReview';
 import TransactionReview from './TransactionReview';
 import BusinessClaimReview from './BusinessClaimReview';
+import WarehouseReview from './WarehouseReview';
 
 const UI = {
     primary: '#0077B6',
@@ -95,6 +97,13 @@ export default function ReviewPanel() {
                         </TabBtn>
 
                         <TabBtn
+                            id="warehouses"
+                            icon={FaWarehouse}
+                        >
+                            Almacenes
+                        </TabBtn>
+
+                        <TabBtn
                             id="users"
                             icon={FaUserCheck}
                         >
@@ -115,6 +124,10 @@ export default function ReviewPanel() {
 
                     {view === 'events' && (
                         <EventReview />
+                    )}
+
+                    {view === 'warehouses' && (
+                        <WarehouseReview />
                     )}
 
                     {view === 'users' && (
